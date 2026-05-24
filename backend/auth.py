@@ -101,6 +101,8 @@ def require_roles(*allowed: Role):
 require_admin = require_roles(Role.ADMIN)
 require_meter_eng = require_roles(Role.ADMIN, Role.METER_ENG)
 require_accountant = require_roles(Role.ADMIN, Role.ACCOUNTANT)
+# 时序读数录入：运行人员、计量工程师、管理员都允许
+require_operator = require_roles(Role.ADMIN, Role.METER_ENG, Role.OPERATOR)
 
 
 def verify_integration_secret(header_value: str | None) -> None:

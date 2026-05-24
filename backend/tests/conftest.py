@@ -91,3 +91,9 @@ def meter_eng_headers(client, session_factory) -> dict[str, str]:
 def viewer_headers(client, session_factory) -> dict[str, str]:
     _create_user(session_factory, "viewer", "view123", Role.VIEWER)
     return {"Authorization": f"Bearer {_login(client, 'viewer', 'view123')}"}
+
+
+@pytest.fixture
+def operator_headers(client, session_factory) -> dict[str, str]:
+    _create_user(session_factory, "operator", "op123", Role.OPERATOR)
+    return {"Authorization": f"Bearer {_login(client, 'operator', 'op123')}"}

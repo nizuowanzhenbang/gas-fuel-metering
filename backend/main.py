@@ -15,6 +15,7 @@ from .routers import auth as auth_router
 from .routers import gas_sources as gas_sources_router
 from .routers import gc_analyzers as gc_analyzers_router
 from .routers import metering_stations as metering_stations_router
+from .routers import readings as readings_router
 
 _settings = get_settings()
 
@@ -61,6 +62,7 @@ app.include_router(auth_router.router)
 app.include_router(gas_sources_router.router)
 app.include_router(metering_stations_router.router)
 app.include_router(gc_analyzers_router.router)
+app.include_router(readings_router.router)
 
 
 @app.get("/health", tags=["meta"])

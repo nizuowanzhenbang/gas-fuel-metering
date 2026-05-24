@@ -26,7 +26,7 @@
 - [x] ✅ models/gc_readings.py
 - [x] ✅ models/settlement_records.py
 - [x] ✅ models/alerts.py
-- [x] 🚧 schemas/ Pydantic 对应模型（已覆盖：auth + 档案三件套；时序读数/对账/告警 schema 等接入路由时再补）
+- [x] 🚧 schemas/ Pydantic 对应模型（已覆盖：auth + 档案三件套 + 时序读数；对账/告警 schema 等接入路由时再补）
 
 ### 核心算法（必须有单元测试）
 
@@ -52,7 +52,7 @@
 - [x] ✅ routers/metering_stations.py（CRUD + 关联气源校验 + 设计流量区间校验 + 软停用 OFFLINE）
 - [x] ✅ routers/gc_analyzers.py（CRUD + 关联计量站校验 + 软停用 OFFLINE）
 - [x] ✅ main.py 挂载 4 路由 + lifespan ensure_default_admin（用户表为空时按 .env 建首个 ADMIN）
-- [ ] routers/readings.py（接收计量+组分数据，HTTP POST）
+- [x] ✅ routers/readings.py（计量分钟级 + GC 组分；POST 自动调温压补偿/热值算法回填；GET 按站/GC/有效性/时间窗筛选）
 - [ ] routers/upload.py（上游日报 Excel 导入）
 - [ ] routers/reconciliation.py（手动触发日对账）
 - [ ] routers/alerts.py（告警查询、处置）
@@ -127,6 +127,7 @@
 - 2026-05-24：v0.1 第一刀 —— 后端骨架 + 8 张 ORM 表 + 温压补偿 + 热值计算 + 档案 schema，16 个单测通过（commit feat/v0.1-skeleton）
 - 2026-05-24：v0.1 第二刀 —— utils/reconciliation.py 算法三件套收尾（日 0.5% / 月 0.3% / 主备 0.3%，PASS/WARN/FAIL 三档），+8 个单测，累计 24 单测全过
 - 2026-05-24：v0.1 第三刀 —— routers/auth + 档案三件套 CRUD（gas_sources / metering_stations / gc_analyzers）+ main.py 挂载 + ensure_default_admin 启动钩子 + conftest（in-memory SQLite/StaticPool）+ 17 个 router 集成测试，累计 41 测试全过
+- 2026-05-24：v0.1 第四刀 —— routers/readings.py（计量分钟级 + GC 组分时序写入，POST 自动调温压补偿/热值算法回填，端到端打通算法层和路由层）+ schemas/readings + require_operator 角色组 + 8 个集成测试（含算法回填一致性校验），累计 49 测试全过
 
 ---
 
