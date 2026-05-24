@@ -13,11 +13,16 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from backend import models  # noqa: F401  确保所有 ORM 注册到 Base.metadata
-from backend.auth import Role, hash_password
-from backend.database import Base, get_db
-from backend.main import app
-from backend.models.users import User
+import os
+
+# 测试环境禁用 APScheduler，避免后台线程在断言期间偷写表
+os.environ.setdefault("ENABLE_SCHEDULER", "false")
+
+from backend import models  # noqa: F401,E402  确保所有 ORM 注册到 Base.metadata
+from backend.auth import Role, hash_password  # noqa: E402
+from backend.database import Base, get_db  # noqa: E402
+from backend.main import app  # noqa: E402
+from backend.models.users import User  # noqa: E402
 
 
 @pytest.fixture

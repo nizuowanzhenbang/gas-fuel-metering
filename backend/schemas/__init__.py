@@ -1,8 +1,9 @@
 """Pydantic schema 集中导出。
 
-v0.1 覆盖范围：认证 + 账户 + 档案三件套（气源 / 计量站 / GC）+ 时序读数（计量 / GC）
-+ 对账（日 / 主备回路）。告警等 schema 待路由层接入时再补。
+v1.0 覆盖范围：认证 + 账户 + 档案三件套（气源 / 计量站 / GC）+ 时序读数（计量 / GC）
++ 对账（日 / 主备回路）+ 告警 + 上游日报导入。
 """
+from .alerts import AlertCreate, AlertRead
 from .auth import LoginRequest, TokenResponse
 from .common import PagedResult, PageParams
 from .gas_sources import GasSourceCreate, GasSourceRead, GasSourceUpdate
@@ -27,6 +28,8 @@ from .reconciliation import (
 from .users import PasswordResetRequest, UserCreate, UserRead, UserUpdate
 
 __all__ = [
+    "AlertCreate",
+    "AlertRead",
     "DailyReconciliationRequest",
     "DailyReconciliationResponse",
     "DualLoopReconciliationRequest",

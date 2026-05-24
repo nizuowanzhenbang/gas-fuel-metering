@@ -11,13 +11,17 @@ from .auth import Role, hash_password
 from .config import get_settings
 from .database import SessionLocal, init_db
 from .models.users import User
+from .routers import alerts as alerts_router
 from .routers import auth as auth_router
+from .routers import dashboard as dashboard_router
 from .routers import gas_sources as gas_sources_router
 from .routers import gc_analyzers as gc_analyzers_router
 from .routers import metering_stations as metering_stations_router
 from .routers import readings as readings_router
 from .routers import reconciliation as reconciliation_router
+from .routers import upload as upload_router
 from .routers import users as users_router
+from .scheduler import shutdown_scheduler, start_scheduler
 
 _settings = get_settings()
 
@@ -42,7 +46,12 @@ def ensure_default_admin() -> None:
 async def lifespan(_: FastAPI):
     init_db()
     ensure_default_admin()
-    yield
+    if _settings.enable_scheduler:
+        start_scheduler()
+    try:
+        yield
+    finally:
+        shutdown_scheduler()
 
 
 app = FastAPI(
@@ -67,6 +76,9 @@ app.include_router(metering_stations_router.router)
 app.include_router(gc_analyzers_router.router)
 app.include_router(readings_router.router)
 app.include_router(reconciliation_router.router)
+app.include_router(alerts_router.router)
+app.include_router(upload_router.router)
+app.include_router(dashboard_router.router)
 
 
 @app.get("/health", tags=["meta"])

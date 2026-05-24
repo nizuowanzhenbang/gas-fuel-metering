@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     default_admin_password: str = "admin123"
     default_admin_full_name: str = "默认管理员"
 
+    enable_scheduler: bool = True  # 测试环境通过 .env 关闭
+
     gas_turbine_base: str = "http://gas-turbine-performance:8011"
     fuel_procurement_base: str = "http://fuel-procurement:8005"
     equipment_inspection_base: str = "http://equipment-inspection:8006"
