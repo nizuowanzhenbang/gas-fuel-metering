@@ -5,18 +5,27 @@ from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from typing import Annotated
 
+import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .database import get_db
 
 _settings = get_settings()
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _oauth2 = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+
+# bcrypt 单算法 72 字节上限，预先 SHA-256 摘要再编 base64，
+# 既绕过长度限制又不依赖已停更的 passlib。
+import base64
+import hashlib
+
+
+def _prepare(secret: str) -> bytes:
+    digest = hashlib.sha256(secret.encode("utf-8")).digest()
+    return base64.b64encode(digest)
 
 
 class Role(StrEnum):
@@ -28,11 +37,14 @@ class Role(StrEnum):
 
 
 def hash_password(plain: str) -> str:
-    return _pwd_ctx.hash(plain)
+    return bcrypt.hashpw(_prepare(plain), bcrypt.gensalt()).decode("ascii")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return _pwd_ctx.verify(plain, hashed)
+    try:
+        return bcrypt.checkpw(_prepare(plain), hashed.encode("ascii"))
+    except ValueError:
+        return False
 
 
 def create_access_token(subject: str, role: Role, expires_minutes: int | None = None) -> str:
