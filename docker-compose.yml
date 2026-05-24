@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gfm-postgres
+    environment:
+      POSTGRES_USER: gfm
+      POSTGRES_PASSWORD: gfm
+      POSTGRES_DB: gas_fuel
+    volumes:
+      - gfm-pg-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gfm -d gas_fuel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: gfm-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://gfm:gfm@postgres:5432/gas_fuel
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      INTEGRATION_SECRET: ${INTEGRATION_SECRET:-change-me-in-production}
+      DEFAULT_ADMIN_USERNAME: admin
+      DEFAULT_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      DEFAULT_ADMIN_FULL_NAME: 默认管理员
+      ENABLE_SCHEDULER: "true"
+    ports:
+      - "8010:8010"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: gfm-frontend
+    depends_on:
+      - backend
+    ports:
+      - "5180:5180"
+    restart: unless-stopped
+
+volumes:
+  gfm-pg-data:

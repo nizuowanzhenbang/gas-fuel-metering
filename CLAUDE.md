@@ -7,7 +7,7 @@
 - **所属平台**：[智慧火电厂全链路管理平台](https://github.com/nizuowanzhenbang/smart-power-plant) 的 **燃气电厂线**
 - **本项目角色**：燃气线 **燃料入口** —— 管道气计量 + 热值在线分析 + 与上游气源公司结算对账
 - **对标煤电线**：相当于 coal-transport-monitor + coal-quality-monitor + 部分 fuel-procurement，三合一
-- **当前阶段**：v0.1 设计中（仅文档，未实现代码）
+- **当前阶段**：v1.0 落地完成 —— 后端 + 前端 + Docker，97 测试全过
 
 ## 技术栈基线（与火电厂其他子系统一致）
 

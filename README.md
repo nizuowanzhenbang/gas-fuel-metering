@@ -4,7 +4,7 @@
 >
 > 本项目是 [智慧火电厂全链路管理平台](https://github.com/nizuowanzhenbang/smart-power-plant) 的 **燃气电厂线** 第一个子系统，对应燃煤线的 [煤炭采购+运输监督+煤质化验] 三合一位置。
 >
-> **当前版本：** v0.1（设计中 🚧），仓库目前只有业务设计文档，未包含代码实现。
+> **当前版本：v1.0** —— 后端 (FastAPI + 8 ORM + 9 路由 + APScheduler 4 类任务 + 跨系统调用)、前端 (Vite + React + TS + Ant Design + ECharts + Zustand)、Docker Compose 部署 全部落地，**97 个测试全部通过**。
 
 ---
 
@@ -307,4 +307,78 @@ Wobbe 指数表征"等压等开度下通过燃料阀的能量流"。**控制系�
 | emission-monitoring | 双线共享 · 环保排放（参数库切换） | https://github.com/nizuowanzhenbang/emission-monitoring |
 | fuel-procurement | 框架可复用 · 采购审批 | https://github.com/nizuowanzhenbang/fuel-procurement |
 
-> 本仓库 v0.1 阶段只交付业务设计文档（README + CLAUDE.md + TASK.md），代码实现按 TASK.md 的优先级逐步推进。
+## 十、本地启动 / Docker 部署
+
+### 后端单跑（SQLite，开发用）
+
+```bash
+cd backend
+python -m venv .venv && source .venv/Scripts/activate     # Windows
+pip install -r requirements.txt
+python -m backend.seed_data --reset                        # 种入演示数据
+uvicorn backend.main:app --port 8010 --reload
+# Swagger 文档：http://localhost:8010/docs
+```
+
+### 前端单跑（开发热更新）
+
+```bash
+cd frontend
+npm install
+npm run dev   # http://localhost:5180
+```
+
+演示账户（密码统一 `demo123`）：
+
+| 用户名 | 角色 | 能做什么 |
+|---|---|---|
+| admin | ADMIN | 全部 |
+| engineer | METER_ENG | 档案 RW、计量录入、对账 |
+| operator | OPERATOR | 计量数据录入、告警处置 |
+| accountant | ACCOUNTANT | 上游日报上传、对账、结算 |
+| viewer | VIEWER | 只读 |
+
+### 一键容器化（PostgreSQL + 后端 + 前端）
+
+```bash
+cp .env.example .env       # 改 JWT_SECRET / INTEGRATION_SECRET / ADMIN_PASSWORD
+docker compose up -d --build
+# 前端 http://localhost:5180  后端 http://localhost:8010
+```
+
+容器栈：
+- `postgres:16-alpine`（持久卷 `gfm-pg-data`）
+- `backend`（uvicorn + APScheduler）
+- `frontend`（nginx 静态托管，反代 `/api` 到后端）
+
+---
+
+## 十一、角色权限矩阵（与平台对齐）
+
+| 操作 | ADMIN | METER_ENG | OPERATOR | ACCOUNTANT | VIEWER |
+|---|---|---|---|---|---|
+| 档案管理（气源 / 站 / GC） | RW | RW | R | R | R |
+| 时序读数录入 | RW | RW | RW | — | — |
+| 日对账触发 | RW | RW | — | RW | — |
+| 上游日报 Excel 上传 | RW | — | — | RW | — |
+| 告警处置 | RW | RW | RW | RW | R |
+| 用户管理 | RW | — | — | — | — |
+
+---
+
+## 十二、跨系统集成清单
+
+调用方向以本系统为视角，全部经由 `backend/services/integration_client.py`，3 秒超时 + 2 次重试 + `X-Integration-Secret` 头。
+
+| 目标系统 | 方向 | 路径 | 用途 |
+|---|---|---|---|
+| gas-turbine-performance | OUT GET | `/api/integration/turbine-output` | 拉燃机出力算热效率 |
+| fuel-procurement | OUT GET | `/api/integration/gas-contract` | 拉气源合同基准 |
+| fuel-procurement | OUT POST | `/api/webhook/gas-delivered` | 月度计量回写 |
+| equipment-inspection | OUT GET | `/api/integration/equipment-health` | 拉计量设备点检状态 |
+| emission-monitoring | IN GET | `/api/integration/gas-composition` | 提供气质组分 |
+| plant-safety | OUT POST | `/api/integration/hazards` | 计量故障 / 管网异常报隐患 |
+
+---
+
+> 本仓库 v1.0 阶段已落地完整后端 + 前端 + Docker，可作为燃气线后续 5 个子系统（gas-turbine-performance / gas-emission-monitoring …）的样板。后续路线见 [TASK.md](TASK.md)。
