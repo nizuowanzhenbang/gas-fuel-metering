@@ -20,6 +20,11 @@ class Settings(BaseSettings):
 
     integration_secret: str = "dev-integration-secret"
 
+    # 启动 ensure：用户表为空时建第一个 ADMIN 账户。生产 .env 必须覆盖。
+    default_admin_username: str = "admin"
+    default_admin_password: str = "admin123"
+    default_admin_full_name: str = "默认管理员"
+
     gas_turbine_base: str = "http://gas-turbine-performance:8011"
     fuel_procurement_base: str = "http://fuel-procurement:8005"
     equipment_inspection_base: str = "http://equipment-inspection:8006"

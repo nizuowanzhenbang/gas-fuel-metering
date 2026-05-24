@@ -46,11 +46,12 @@
 
 ### 路由（最小可用集）
 
-- [ ] routers/auth.py（登录 / 刷新 token）
+- [x] ✅ routers/auth.py（OAuth2 表单登录，返回 JWT）
 - [ ] routers/users.py（账户 CRUD，仅 ADMIN）
-- [ ] routers/gas_sources.py（气源档案 CRUD）
-- [ ] routers/metering_stations.py（计量站档案 CRUD）
-- [ ] routers/gc_analyzers.py（GC 档案 CRUD）
+- [x] ✅ routers/gas_sources.py（气源档案 CRUD + 状态筛选 + 软删除 RETIRED）
+- [x] ✅ routers/metering_stations.py（CRUD + 关联气源校验 + 设计流量区间校验 + 软停用 OFFLINE）
+- [x] ✅ routers/gc_analyzers.py（CRUD + 关联计量站校验 + 软停用 OFFLINE）
+- [x] ✅ main.py 挂载 4 路由 + lifespan ensure_default_admin（用户表为空时按 .env 建首个 ADMIN）
 - [ ] routers/readings.py（接收计量+组分数据，HTTP POST）
 - [ ] routers/upload.py（上游日报 Excel 导入）
 - [ ] routers/reconciliation.py（手动触发日对账）
@@ -125,6 +126,7 @@
 - 2026-05-23：v0.1 文档三件套完成，仓库创建（仅文档，无代码）
 - 2026-05-24：v0.1 第一刀 —— 后端骨架 + 8 张 ORM 表 + 温压补偿 + 热值计算 + 档案 schema，16 个单测通过（commit feat/v0.1-skeleton）
 - 2026-05-24：v0.1 第二刀 —— utils/reconciliation.py 算法三件套收尾（日 0.5% / 月 0.3% / 主备 0.3%，PASS/WARN/FAIL 三档），+8 个单测，累计 24 单测全过
+- 2026-05-24：v0.1 第三刀 —— routers/auth + 档案三件套 CRUD（gas_sources / metering_stations / gc_analyzers）+ main.py 挂载 + ensure_default_admin 启动钩子 + conftest（in-memory SQLite/StaticPool）+ 17 个 router 集成测试，累计 41 测试全过
 
 ---
 
