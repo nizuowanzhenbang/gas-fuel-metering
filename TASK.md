@@ -9,34 +9,35 @@
 - [x] ✅ README.md 业务设计文档
 - [x] ✅ CLAUDE.md 开发约定与术语
 - [x] ✅ TASK.md 本文件
-- [ ] .gitignore（Python + Node 标准模板）
+- [x] ✅ .gitignore（Python + Node 标准模板）
 
 ### 后端骨架
 
-- [ ] backend/ 目录初始化（pyproject.toml + requirements.txt）
-- [ ] main.py（FastAPI 实例 + CORS + JWT 中间件）
-- [ ] database.py（SQLAlchemy + Session 工厂）
-- [ ] auth.py（JWT 签发与校验 + 5 角色 RBAC）
-- [ ] models/users.py
-- [ ] models/gas_sources.py
-- [ ] models/metering_stations.py
-- [ ] models/gc_analyzers.py
-- [ ] models/metering_readings.py（含 validity 字段）
-- [ ] models/gc_readings.py
-- [ ] models/settlement_records.py
-- [ ] models/alerts.py
-- [ ] schemas/ Pydantic 对应模型
+- [x] ✅ backend/ 目录初始化（pyproject.toml + requirements.txt + .env.example）
+- [x] ✅ main.py（FastAPI 实例 + CORS + lifespan）
+- [x] ✅ database.py（SQLAlchemy 2.x + Session 工厂 + init_db）
+- [x] ✅ auth.py（JWT 签发与校验 + 5 角色 RBAC + 跨系统暗号校验）
+- [x] ✅ config.py（pydantic-settings，环境变量集中读取）
+- [x] ✅ models/users.py
+- [x] ✅ models/gas_sources.py
+- [x] ✅ models/metering_stations.py
+- [x] ✅ models/gc_analyzers.py
+- [x] ✅ models/metering_readings.py（含 validity 字段）
+- [x] ✅ models/gc_readings.py
+- [x] ✅ models/settlement_records.py
+- [x] ✅ models/alerts.py
+- [x] 🚧 schemas/ Pydantic 对应模型（已覆盖：auth + 档案三件套；时序读数/对账/告警 schema 等接入路由时再补）
 
 ### 核心算法（必须有单元测试）
 
-- [ ] utils/pressure_temp_compensation.py
-  - [ ] 基础温压补偿（GB/T 22634 公式）
-  - [ ] Z 因子查表法（v0.1 用查表，v0.2 升级 AGA8）
-  - [ ] 单元测试：用 GB/T 22634 标准例题验证
-- [ ] utils/heating_value.py
-  - [ ] HHV / LHV 计算（GB/T 11062）
-  - [ ] Wobbe 指数计算
-  - [ ] 单元测试：用 GB/T 11062 标准例题验证
+- [x] ✅ utils/pressure_temp_compensation.py
+  - [x] ✅ 基础温压补偿（GB/T 22634 公式）
+  - [x] ✅ Z 因子查表法（双线性插值 + 边界夹断，v0.2 升级 AGA8）
+  - [x] ✅ 单元测试：8 个用例，覆盖标准态、网格点、超差、单调性、异常值
+- [x] ✅ utils/heating_value.py
+  - [x] ✅ HHV / LHV 计算（GB/T 11062，7 主组分 + others）
+  - [x] ✅ Wobbe 指数计算 + 密度 + 相对密度
+  - [x] ✅ 单元测试：8 个用例，覆盖纯组分、典型管道气、惰性气、容差边界
 - [ ] utils/reconciliation.py
   - [ ] 日对账容差判定（0.5%）
   - [ ] 月对账容差判定（0.3%）
@@ -122,6 +123,7 @@
 ## 历史变更
 
 - 2026-05-23：v0.1 文档三件套完成，仓库创建（仅文档，无代码）
+- 2026-05-24：v0.1 第一刀 —— 后端骨架 + 8 张 ORM 表 + 温压补偿 + 热值计算 + 档案 schema，16 个单测通过（commit feat/v0.1-skeleton）
 
 ---
 
