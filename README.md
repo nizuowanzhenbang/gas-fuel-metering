@@ -382,3 +382,8 @@ docker compose up -d --build
 ---
 
 > 本仓库 v1.0 阶段已落地完整后端 + 前端 + Docker，可作为燃气线后续 5 个子系统（gas-turbine-performance / gas-emission-monitoring …）的样板。后续路线见 [TASK.md](TASK.md)。
+
+
+## 持续维护
+
+[开发与验收说明](docs/MAINTENANCE.md)：自动检查、回归测试与演示边界。
