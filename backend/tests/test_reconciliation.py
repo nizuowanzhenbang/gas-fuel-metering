@@ -7,6 +7,19 @@ from __future__ import annotations
 
 import math
 
+
+def test_non_finite_volumes_cannot_receive_a_verdict():
+    import pytest
+    from backend.utils.reconciliation import reconcile_daily, reconcile_dual_loop
+    for value in (math.nan, math.inf, -math.inf):
+        for fn in (reconcile_daily, reconcile_dual_loop):
+            with pytest.raises(ValueError):
+                fn(value, 100)
+            with pytest.raises(ValueError):
+                fn(100, value)
+
+import math
+
 import pytest
 
 from backend.utils.reconciliation import (

@@ -66,7 +66,7 @@ def _setup_source_with_readings(client, headers, *, plant_total_nm3: float = 1_0
         "/api/readings/metering",
         json={
             **base_reading,
-            "ts": "2026-06-01T23:59:00+00:00",
+            "ts": "2026-06-02T00:00:00+00:00",
             "accumulated_volume_nm3": 1_000_000.0 + plant_total_nm3,
         },
         headers=headers,
@@ -170,4 +170,5 @@ def test_upload_row_with_no_valid_readings_returns_error_in_row(client, admin_he
     r = _upload(client, admin_headers, blob)
     body = r.json()
     assert body["success"] == 0
-    assert "VALID" in body["rows"][0]["error"] or "读数" in body["rows"][0]["error"]
+    assert body["rows"][0]["error"]
+    assert body["rows"][0]["verdict"] is None

@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { Alert, Button, Card, DatePicker, Form, InputNumber, Select, Space, Statistic, Table, Tag, Upload, message } from "antd";
 import { InboxOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
+import { isAxiosError } from "axios";
 import {
   DailyReconResult,
+  MeteringEvidence,
   GasSource,
   UploadResponse,
   listGasSources,
@@ -12,6 +14,11 @@ import {
 } from "../api/resources";
 
 const VERDICT_COLOR: Record<string, string> = { PASS: "green", WARN: "orange", FAIL: "red" };
+const ISSUE_LABEL: Record<string, string> = {
+  INSUFFICIENT_SAMPLES: "有效读数不足两条", INCOMPLETE_DAY: "缺少完整日边界",
+  COUNTER_ROLLBACK: "累计表回退，需核对复位", DUPLICATE_TIMESTAMP: "同一时刻存在多条读数",
+  INVALID_COUNTER: "累计值无效", MISALIGNED_LOOPS: "主备计量区间不一致",
+};
 
 export default function ReconciliationPage() {
   const [sources, setSources] = useState<GasSource[]>([]);
@@ -19,6 +26,8 @@ export default function ReconciliationPage() {
   const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null);
   const [form] = Form.useForm();
   const [uploading, setUploading] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [qualityError, setQualityError] = useState<{ message: string; stations: MeteringEvidence[] } | null>(null);
 
   useEffect(() => {
     listGasSources({ size: 200 }).then((r) => setSources(r.items));
@@ -26,6 +35,9 @@ export default function ReconciliationPage() {
 
   const onRun = async () => {
     const v = await form.validateFields();
+    setResult(null);
+    setQualityError(null);
+    setRunning(true);
     try {
       const r = await reconcileDaily({
         source_id: v.source_id,
@@ -33,8 +45,12 @@ export default function ReconciliationPage() {
         upstream_volume_nm3: v.upstream_volume_nm3,
       });
       setResult(r);
-    } catch {
-      /* toast handled */
+    } catch (error) {
+      if (isAxiosError(error) && error.response?.data?.detail?.code === "METERING_DATA_QUALITY") {
+        setQualityError(error.response.data.detail);
+      }
+    } finally {
+      setRunning(false);
     }
   };
 
@@ -53,6 +69,8 @@ export default function ReconciliationPage() {
   return (
     <Space direction="vertical" size="middle" style={{ width: "100%" }}>
       <Card title="手动日对账" extra={<ThunderboltOutlined />}>
+        <Alert type="info" showIcon style={{ marginBottom: 16 }}
+          message="按 UTC 自然日对账：每站需具备当日 00:00 和次日 00:00 的有效累计读数。缺数或回退时先核对数据，再生成结论。" />
         <Form form={form} layout="inline" onFinish={onRun} initialValues={{ business_date: dayjs().subtract(1, "day") }}>
           <Form.Item name="source_id" label="气源" rules={[{ required: true }]}>
             <Select style={{ width: 240 }} options={sources.map((s) => ({ value: s.id, label: `${s.code} ${s.name}` }))} />
@@ -63,7 +81,7 @@ export default function ReconciliationPage() {
           <Form.Item name="upstream_volume_nm3" label="上游计量(Nm³)" rules={[{ required: true }]}>
             <InputNumber min={0} style={{ width: 180 }} />
           </Form.Item>
-          <Button type="primary" htmlType="submit">执行对账</Button>
+          <Button type="primary" htmlType="submit" loading={running}>执行对账</Button>
         </Form>
 
         {result && (
@@ -73,7 +91,7 @@ export default function ReconciliationPage() {
               showIcon
               message={
                 <span>
-                  对账判定 <Tag color={VERDICT_COLOR[result.verdict]}>{result.verdict}</Tag> — {result.reason}
+                  {result.source_code} / {result.business_date} UTC 对账判定 <Tag color={VERDICT_COLOR[result.verdict]}>{result.verdict}</Tag> — {result.reason}
                 </span>
               }
             />
@@ -87,6 +105,26 @@ export default function ReconciliationPage() {
             </Space>
           </div>
         )}
+        {qualityError && <Alert type="warning" showIcon style={{ marginTop: 16 }}
+          message="数据待核对，未生成对账结论" description="请核对下方站点与读数；修正数据后重新执行。" />}
+        {(result || qualityError) && <Table<MeteringEvidence>
+          style={{ marginTop: 16 }} size="small" pagination={false} scroll={{ x: 1000 }}
+          rowKey={(row) => `${row.station_id}-${row.source}`}
+          dataSource={qualityError?.stations ?? result?.stations ?? []}
+          columns={[
+            { title: "站点 ID", dataIndex: "station_id" },
+            { title: "回路", dataIndex: "source" },
+            { title: "起始 (UTC)", dataIndex: "first_ts", render: (v) => v || "缺失" },
+            { title: "结束 (UTC)", dataIndex: "last_ts", render: (v) => v || "缺失" },
+            { title: "有效/排除", render: (_, r) => `${r.sample_count} / ${r.excluded_count}` },
+            { title: "首值", dataIndex: "start_counter_nm3", render: (v) => v ?? "—" },
+            { title: "末值", dataIndex: "end_counter_nm3", render: (v) => v ?? "—" },
+            { title: "计量 (Nm³)", dataIndex: "volume_nm3", render: (v) => v ?? "未计算" },
+            { title: "数据检查", render: (_, r) => r.issues.length
+              ? r.issues.map(issue => <Tag color="orange" key={issue}>{ISSUE_LABEL[issue] || issue}</Tag>)
+              : <Tag color="green">通过</Tag> },
+          ]}
+        />}
       </Card>
 
       <Card title="上游日报批量导入（Excel）">
@@ -108,6 +146,23 @@ export default function ReconciliationPage() {
             size="small"
             pagination={false}
             dataSource={uploadResult.rows}
+            expandable={{
+              rowExpandable: (row) => row.stations.length > 0,
+              expandedRowRender: (row) => <Table<MeteringEvidence> size="small" pagination={false}
+                rowKey={(e) => `${e.station_id}-${e.source}`} dataSource={row.stations} scroll={{ x: 900 }}
+                columns={[
+                  { title: "站点 ID", dataIndex: "station_id" },
+                  { title: "回路", dataIndex: "source" },
+                  { title: "起始 UTC", dataIndex: "first_ts", render: (v) => v || "缺失" },
+                  { title: "结束 UTC", dataIndex: "last_ts", render: (v) => v || "缺失" },
+                  { title: "有效/排除", render: (_, r) => `${r.sample_count} / ${r.excluded_count}` },
+                  { title: "首值", dataIndex: "start_counter_nm3", render: (v) => v ?? "—" },
+                  { title: "末值", dataIndex: "end_counter_nm3", render: (v) => v ?? "—" },
+                  { title: "计量 Nm³", dataIndex: "volume_nm3", render: (v) => v ?? "未计算" },
+                  { title: "数据检查", render: (_, r) => r.issues.length
+                    ? r.issues.map(issue => ISSUE_LABEL[issue] || issue).join("；") : "通过" },
+                ]} />,
+            }}
             columns={[
               { title: "行号", dataIndex: "row_index", width: 70 },
               { title: "业务日期", dataIndex: "business_date", width: 110 },

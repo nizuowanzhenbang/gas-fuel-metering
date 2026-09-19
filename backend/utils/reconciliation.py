@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from math import isfinite
 
 DAILY_TOLERANCE_PCT = 0.5
 MONTHLY_TOLERANCE_PCT = 0.3
@@ -77,6 +78,8 @@ def _reconcile(
     upstream_nm3: float,
     tolerance_pct: float,
 ) -> ReconciliationResult:
+    if not all(isfinite(v) for v in (plant_nm3, upstream_nm3)):
+        raise ValueError('volumes must be finite')
     if plant_nm3 < 0 or upstream_nm3 < 0:
         raise ValueError("volumes must be non-negative")
     if upstream_nm3 == 0:
@@ -112,6 +115,8 @@ def reconcile_dual_loop(primary_nm3: float, backup_nm3: float) -> DualLoopResult
 
     两路都是厂内计量，谁错不知道，所以用平均值做基准。
     """
+    if not all(isfinite(v) for v in (primary_nm3, backup_nm3)):
+        raise ValueError('volumes must be finite')
     if primary_nm3 < 0 or backup_nm3 < 0:
         raise ValueError("volumes must be non-negative")
     mean = (primary_nm3 + backup_nm3) / 2.0

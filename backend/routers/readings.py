@@ -25,6 +25,7 @@ from ..schemas.readings import (
     MeteringReadingRead,
 )
 from ..utils.heating_value import Composition, compute_heating_value
+from ..services.metering_quality import as_utc
 from ..utils.pressure_temp_compensation import (
     DEFAULT_ATMOSPHERIC_KPA,
     CompensationInput,
@@ -70,7 +71,7 @@ def create_metering_reading(
 
     row = MeteringReading(
         station_id=payload.station_id,
-        ts=payload.ts,
+        ts=as_utc(payload.ts),
         actual_volume_rate_m3h=payload.actual_volume_rate_m3h,
         normal_volume_rate_nm3h=result.normal_volume_rate_nm3h,
         pressure_kpa=result.absolute_pressure_kpa,

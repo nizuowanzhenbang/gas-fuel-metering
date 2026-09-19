@@ -207,12 +207,13 @@ def _seed_gcs(db, station_ids: dict[str, int]) -> dict[str, int]:
 
 
 def _seed_readings(db, station_ids: dict[str, int]) -> None:
-    """24h × 5min 主回路 + 同期备份；主备差控制在 0.1% 以内。"""
+    """从昨日 UTC 零点到当前的 5min 主备读数，覆盖完整昨日对账边界。"""
     now = _now()
     # 截到分钟，避免边界尾数
-    end = now.replace(second=0, microsecond=0)
+    end = now.replace(minute=(now.minute // 5) * 5, second=0, microsecond=0)
     step = timedelta(minutes=5)
-    samples = 24 * 60 // 5  # 288 条/站
+    start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    samples = int((end - start) / step) + 1
 
     for code, sid in station_ids.items():
         # 已有读数则跳过

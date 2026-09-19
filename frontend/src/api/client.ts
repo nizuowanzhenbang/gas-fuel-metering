@@ -25,7 +25,7 @@ http.interceptors.response.use(
     } else if (status === 403) {
       message.error("当前角色无权进行该操作");
     } else if (detail) {
-      message.error(typeof detail === "string" ? detail : JSON.stringify(detail));
+      message.error(typeof detail === "string" ? detail : detail.message || JSON.stringify(detail));
     } else {
       message.error(err.message || "请求失败");
     }
