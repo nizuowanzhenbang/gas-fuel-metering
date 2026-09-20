@@ -20,19 +20,21 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
 from io import BytesIO
+from math import isfinite
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
-from pydantic import BaseModel
-from sqlalchemy import func, select
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from ..auth import CurrentUser, DbSession, Role, require_roles
 from ..models.gas_sources import GasSource
 from ..models.metering_readings import MeteringReading, MeteringSource, Validity
 from ..models.metering_stations import MeteringStation
 from ..utils.reconciliation import reconcile_daily
+from ..services.metering_quality import DataQualityError, MeteringEvidence, source_daily_volume
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
 
@@ -51,6 +53,8 @@ class UploadRowResult(BaseModel):
     relative_diff_pct: float | None = None
     verdict: str | None = None
     error: str | None = None
+    error_code: str | None = None
+    stations: list[MeteringEvidence] = Field(default_factory=list)
 
 
 class UploadResponse(BaseModel):
@@ -65,34 +69,6 @@ def _date_window_utc(business_date: date) -> tuple[datetime, datetime]:
     return start, start + timedelta(days=1)
 
 
-def _aggregate_plant_volume(db, source_id: int, business_date: date) -> tuple[float, int]:
-    start, end = _date_window_utc(business_date)
-    stations = db.scalars(
-        select(MeteringStation).where(MeteringStation.source_id == source_id)
-    ).all()
-    plant_total = 0.0
-    sample_total = 0
-    for st in stations:
-        row = db.execute(
-            select(
-                func.max(MeteringReading.accumulated_volume_nm3),
-                func.min(MeteringReading.accumulated_volume_nm3),
-                func.count(MeteringReading.id),
-            ).where(
-                MeteringReading.station_id == st.id,
-                MeteringReading.source == MeteringSource.PRIMARY,
-                MeteringReading.validity == Validity.VALID,
-                MeteringReading.ts >= start,
-                MeteringReading.ts < end,
-            )
-        ).one()
-        max_v, min_v, cnt = row
-        if cnt and max_v is not None and min_v is not None:
-            plant_total += float(max_v) - float(min_v)
-            sample_total += int(cnt)
-    return plant_total, sample_total
-
-
 def _coerce_business_date(value: Any) -> date:
     if isinstance(value, datetime):
         return value.date()
@@ -105,10 +81,14 @@ def _coerce_business_date(value: Any) -> date:
 
 def _coerce_float(value: Any) -> float:
     if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        return float(value.replace(",", "").strip())
-    raise ValueError(f"无法识别的数字：{value!r}")
+        result = float(value)
+    elif isinstance(value, str):
+        result = float(value.replace(",", "").strip())
+    else:
+        raise ValueError(f"无法识别的数字：{value!r}")
+    if not isfinite(result):
+        raise ValueError('上游计量必须是有限数值')
+    return result
 
 
 def _is_header_row(cells: tuple) -> bool:
@@ -190,15 +170,17 @@ async def upload_upstream_daily(
             if not source:
                 raise ValueError(f"气源代码 {code} 不存在")
 
-            plant_total, sample_count = _aggregate_plant_volume(db, source.id, bdate)
-            if sample_count == 0:
-                raise ValueError(f"{bdate.isoformat()} 该气源下无 VALID 主回路读数")
+            plant_total, _, result.stations = source_daily_volume(db, source.id, bdate)
 
             verdict = reconcile_daily(plant_total, upstream)
             result.plant_volume_nm3 = verdict.plant_volume_nm3
             result.relative_diff_pct = verdict.relative_diff_pct
             result.verdict = verdict.verdict.value
             success += 1
+        except DataQualityError as exc:
+            result.error = str(exc)
+            result.error_code = 'METERING_DATA_QUALITY'
+            result.stations = exc.evidence
         except Exception as exc:  # noqa: BLE001  按行容错
             result.error = str(exc)
         results.append(result)

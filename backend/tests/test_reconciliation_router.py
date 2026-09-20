@@ -1,7 +1,7 @@
 """对账 router 集成测试 —— 日对账 / 主备回路。
 
 验证：
-- 厂内累计聚合（max - min）正确性
+- 厂内累计聚合（完整 UTC 日的末值 - 首值）正确性
 - 三档判定（PASS / WARN / FAIL）端到端
 - RBAC：VIEWER 不可触发
 - 数据缺失时返回 400（无站、无读数、主备缺一）
@@ -77,7 +77,7 @@ def test_daily_pass_when_diff_within_tolerance(client, admin_headers):
         accumulated_volume_nm3=1_000_000.0,
     )
     _post_reading(
-        client, admin_headers, station_id=st, ts="2026-06-01T23:59:00+00:00",
+        client, admin_headers, station_id=st, ts="2026-06-02T00:00:00+00:00",
         accumulated_volume_nm3=1_100_000.0,
     )
 
@@ -108,7 +108,7 @@ def test_daily_warn_when_diff_between_tolerance_and_double(client, admin_headers
         accumulated_volume_nm3=0.0,
     )
     _post_reading(
-        client, admin_headers, station_id=st, ts="2026-06-01T23:59:00+00:00",
+        client, admin_headers, station_id=st, ts="2026-06-02T00:00:00+00:00",
         accumulated_volume_nm3=100_000.0,
     )
     # 上游 100700 → diff = -0.695%（>0.5%，<1.0%）→ WARN
@@ -135,7 +135,7 @@ def test_daily_fail_when_diff_exceeds_double_tolerance(client, admin_headers):
         accumulated_volume_nm3=0.0,
     )
     _post_reading(
-        client, admin_headers, station_id=st, ts="2026-06-01T23:59:00+00:00",
+        client, admin_headers, station_id=st, ts="2026-06-02T00:00:00+00:00",
         accumulated_volume_nm3=100_000.0,
     )
     # 上游 102000 → diff ≈ -1.96% → FAIL（>1.0%）
@@ -162,7 +162,7 @@ def test_daily_aggregates_multiple_stations_of_same_source(client, admin_headers
             accumulated_volume_nm3=start,
         )
         _post_reading(
-            client, admin_headers, station_id=st, ts="2026-06-01T23:59:00+00:00",
+            client, admin_headers, station_id=st, ts="2026-06-02T00:00:00+00:00",
             accumulated_volume_nm3=end,
         )
 
@@ -189,10 +189,10 @@ def test_daily_ignores_other_dates_and_invalid_and_backup(client, admin_headers)
     # 当日 PRIMARY VALID：1000 → 2000，目标值 1000
     _post_reading(client, admin_headers, station_id=st, ts="2026-06-01T00:00:00+00:00",
                   accumulated_volume_nm3=1000.0)
-    _post_reading(client, admin_headers, station_id=st, ts="2026-06-01T23:00:00+00:00",
+    _post_reading(client, admin_headers, station_id=st, ts="2026-06-02T00:00:00+00:00",
                   accumulated_volume_nm3=2000.0)
     # 干扰：其他日期
-    _post_reading(client, admin_headers, station_id=st, ts="2026-06-02T00:00:00+00:00",
+    _post_reading(client, admin_headers, station_id=st, ts="2026-06-02T01:00:00+00:00",
                   accumulated_volume_nm3=99_999.0)
     # 干扰：CALIBRATING
     _post_reading(client, admin_headers, station_id=st, ts="2026-06-01T12:00:00+00:00",
@@ -243,8 +243,8 @@ def test_daily_rejects_when_no_valid_readings(client, admin_headers):
         },
         headers=admin_headers,
     )
-    assert r.status_code == 400
-    assert "no valid primary readings" in r.json()["detail"]
+    assert r.status_code == 409
+    assert "INSUFFICIENT_SAMPLES" in r.json()["detail"]["stations"][0]["issues"]
 
 
 def test_daily_returns_404_for_unknown_source(client, admin_headers):
@@ -265,7 +265,7 @@ def test_daily_viewer_forbidden(client, admin_headers, viewer_headers):
     st = _create_station(client, admin_headers, source_id=sid)
     _post_reading(client, admin_headers, station_id=st, ts="2026-06-01T00:00:00+00:00",
                   accumulated_volume_nm3=0.0)
-    _post_reading(client, admin_headers, station_id=st, ts="2026-06-01T23:00:00+00:00",
+    _post_reading(client, admin_headers, station_id=st, ts="2026-06-02T00:00:00+00:00",
                   accumulated_volume_nm3=100.0)
     r = client.post(
         "/api/reconciliation/daily",
@@ -340,8 +340,8 @@ def test_dual_loop_rejects_when_backup_has_no_readings(client, admin_headers):
         json={"station_id": st, "business_date": "2026-06-01"},
         headers=admin_headers,
     )
-    assert r.status_code == 400
-    assert "primary and backup" in r.json()["detail"]
+    assert r.status_code == 409
+    assert "INSUFFICIENT_SAMPLES" in r.json()["detail"]["stations"][1]["issues"]
 
 
 def test_dual_loop_returns_404_for_unknown_station(client, admin_headers):

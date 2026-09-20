@@ -15,7 +15,7 @@ import logging
 from datetime import date, datetime, time, timedelta, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from .database import SessionLocal
 from .models.alerts import AlertCategory, AlertLevel
@@ -24,6 +24,7 @@ from .models.metering_readings import MeteringReading, MeteringSource, Validity
 from .models.metering_stations import MeteringStation, StationStatus
 from .services.alerting import emit_alert
 from .utils.reconciliation import reconcile_dual_loop
+from .services.metering_quality import DataQualityError, dual_loop_volume
 
 logger = logging.getLogger(__name__)
 
@@ -59,38 +60,13 @@ def scan_primary_backup_deviation() -> int:
             select(MeteringStation).where(MeteringStation.status == StationStatus.RUNNING)
         ).all()
         for st in stations:
-            primary_row = db.execute(
-                select(
-                    func.max(MeteringReading.accumulated_volume_nm3),
-                    func.min(MeteringReading.accumulated_volume_nm3),
-                    func.count(MeteringReading.id),
-                ).where(
-                    MeteringReading.station_id == st.id,
-                    MeteringReading.source == MeteringSource.PRIMARY,
-                    MeteringReading.validity == Validity.VALID,
-                    MeteringReading.ts >= start,
-                    MeteringReading.ts <= end,
-                )
-            ).one()
-            backup_row = db.execute(
-                select(
-                    func.max(MeteringReading.accumulated_volume_nm3),
-                    func.min(MeteringReading.accumulated_volume_nm3),
-                    func.count(MeteringReading.id),
-                ).where(
-                    MeteringReading.station_id == st.id,
-                    MeteringReading.source == MeteringSource.BACKUP,
-                    MeteringReading.validity == Validity.VALID,
-                    MeteringReading.ts >= start,
-                    MeteringReading.ts <= end,
-                )
-            ).one()
-
-            if not primary_row[2] or not backup_row[2]:
+            try:
+                primary, backup = dual_loop_volume(db, st.id, start, end, full_day=False)
+            except DataQualityError as exc:
+                logger.warning('%s: %s', st.code, exc)
                 continue
-
-            primary_vol = float(primary_row[0]) - float(primary_row[1])
-            backup_vol = float(backup_row[0]) - float(backup_row[1])
+            primary_vol = primary.volume_nm3
+            backup_vol = backup.volume_nm3
             if primary_vol <= 0 or backup_vol <= 0:
                 continue
 
@@ -184,34 +160,13 @@ def scan_yesterday_dual_loop() -> int:
             select(MeteringStation).where(MeteringStation.status == StationStatus.RUNNING)
         ).all()
         for st in stations:
-            primary_row = db.execute(
-                select(
-                    func.max(MeteringReading.accumulated_volume_nm3),
-                    func.min(MeteringReading.accumulated_volume_nm3),
-                ).where(
-                    MeteringReading.station_id == st.id,
-                    MeteringReading.source == MeteringSource.PRIMARY,
-                    MeteringReading.validity == Validity.VALID,
-                    MeteringReading.ts >= start,
-                    MeteringReading.ts < end,
-                )
-            ).one()
-            backup_row = db.execute(
-                select(
-                    func.max(MeteringReading.accumulated_volume_nm3),
-                    func.min(MeteringReading.accumulated_volume_nm3),
-                ).where(
-                    MeteringReading.station_id == st.id,
-                    MeteringReading.source == MeteringSource.BACKUP,
-                    MeteringReading.validity == Validity.VALID,
-                    MeteringReading.ts >= start,
-                    MeteringReading.ts < end,
-                )
-            ).one()
-            if primary_row[0] is None or backup_row[0] is None:
+            try:
+                primary, backup = dual_loop_volume(db, st.id, start, end, full_day=True)
+            except DataQualityError as exc:
+                logger.warning('%s: %s', st.code, exc)
                 continue
-            primary_vol = float(primary_row[0]) - float(primary_row[1])
-            backup_vol = float(backup_row[0]) - float(backup_row[1])
+            primary_vol = primary.volume_nm3
+            backup_vol = backup.volume_nm3
             if primary_vol <= 0 or backup_vol <= 0:
                 continue
             verdict = reconcile_dual_loop(primary_vol, backup_vol)

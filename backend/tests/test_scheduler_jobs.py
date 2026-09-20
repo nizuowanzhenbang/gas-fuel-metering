@@ -95,6 +95,21 @@ def test_primary_backup_no_alert_when_within_tolerance(patched_session):
         assert db.scalar(select(Alert).limit(1)) is None
 
 
+def test_counter_reset_does_not_create_misleading_deviation_alert(patched_session, caplog):
+    from backend.scheduler import scan_primary_backup_deviation
+    with patched_session() as db:
+        st = _add_station(db)
+        now = datetime.now(timezone.utc)
+        for minutes, value in [(50, 1000), (25, 10), (1, 1100)]:
+            _add_reading(db, st.id, now - timedelta(minutes=minutes), value, MeteringSource.PRIMARY)
+        for minutes, value in [(50, 1000), (1, 1100)]:
+            _add_reading(db, st.id, now - timedelta(minutes=minutes), value, MeteringSource.BACKUP)
+    assert scan_primary_backup_deviation() == 0
+    assert 'COUNTER_ROLLBACK' in caplog.text
+    with patched_session() as db:
+        assert db.scalar(select(Alert)) is None
+
+
 def test_primary_backup_fires_alert_when_diff_exceeds_double_tolerance(patched_session):
     from backend.scheduler import scan_primary_backup_deviation
 

@@ -89,6 +89,19 @@ export const resolveAlert = (id: number) =>
   http.post<Alert>(`/alerts/${id}/resolve`).then((r) => r.data);
 
 // ------------------------------ 对账 ------------------------------
+export interface MeteringEvidence {
+  station_id: number;
+  source: string;
+  sample_count: number;
+  excluded_count: number;
+  first_ts: string | null;
+  last_ts: string | null;
+  start_counter_nm3: number | null;
+  end_counter_nm3: number | null;
+  volume_nm3: number | null;
+  issues: string[];
+}
+
 export interface DailyReconResult {
   source_id: number;
   source_code: string;
@@ -101,6 +114,7 @@ export interface DailyReconResult {
   verdict: "PASS" | "WARN" | "FAIL";
   reason: string;
   sample_count: number;
+  stations: MeteringEvidence[];
 }
 
 export const reconcileDaily = (body: {
@@ -192,6 +206,8 @@ export interface UploadResponse {
     relative_diff_pct: number | null;
     verdict: string | null;
     error: string | null;
+    error_code: string | null;
+    stations: MeteringEvidence[];
   }[];
 }
 

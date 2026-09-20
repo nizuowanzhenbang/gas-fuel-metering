@@ -2,7 +2,7 @@
 
 业务约定：
 - 日对账请求体 = 气源 + 业务日期 + 上游日报量；后端按该气源下所有计量站的
-  主用回路 VALID 读数，按 `max(accumulated) - min(accumulated)` 聚合厂内日累计。
+  主用回路 VALID 读数，必须具备当日与次日 00:00 UTC 边界，检查单调性后按末值减首值聚合。
 - 主备回路对账请求体 = 计量站 + 业务日期；后端分别聚合 PRIMARY / BACKUP
   读数，调 utils.reconciliation.reconcile_dual_loop。
 - 业务日期按 UTC 解释（与时序读数 ts 的时区一致）。
@@ -14,12 +14,13 @@ from datetime import date
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..utils.reconciliation import Verdict
+from ..services.metering_quality import MeteringEvidence
 
 
 class DailyReconciliationRequest(BaseModel):
     source_id: int
     business_date: date
-    upstream_volume_nm3: float = Field(gt=0, description="上游公司日报量，作为对账基准")
+    upstream_volume_nm3: float = Field(gt=0, allow_inf_nan=False, description="上游公司日报量，作为对账基准")
 
 
 class DailyReconciliationResponse(BaseModel):
@@ -36,6 +37,7 @@ class DailyReconciliationResponse(BaseModel):
     verdict: Verdict
     reason: str
     sample_count: int = Field(description="参与聚合的有效读数条数")
+    stations: list[MeteringEvidence]
 
 
 class DualLoopReconciliationRequest(BaseModel):
@@ -58,3 +60,4 @@ class DualLoopReconciliationResponse(BaseModel):
     reason: str
     primary_sample_count: int
     backup_sample_count: int
+    stations: list[MeteringEvidence]
