@@ -7,8 +7,10 @@ from .metering_readings import MeteringReading, MeteringSource, Validity
 from .metering_stations import MeteringStation, StationStatus
 from .settlement_records import SettlementRecord, SettlementStatus
 from .users import User
+from .reconciliation_runs import ReconciliationRun
 
 __all__ = [
+    "ReconciliationRun",
     "Alert",
     "AlertCategory",
     "AlertLevel",

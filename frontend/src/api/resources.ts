@@ -128,6 +128,21 @@ export const reconcileDaily = (body: {
   upstream_volume_nm3: number;
 }) => http.post<DailyReconResult>("/reconciliation/daily", body).then((r) => r.data);
 
+export interface RunSummary {
+  id: string; parent_run_id: string | null; source_id: number; business_date: string;
+  created_at: string; created_by: string; snapshot_sha256: string;
+  result: Pick<DailyReconResult, "plant_volume_nm3" | "upstream_volume_nm3" | "verdict">;
+}
+export interface ArchivedRun extends Omit<RunSummary, "result"> {
+  snapshot: { result: RunSummary["result"]; delta_plant_nm3: number | null; [key: string]: unknown };
+}
+export const listReconciliationRuns = () => http.get<RunSummary[]>("/reconciliation/runs").then(r => r.data);
+export const archiveReconciliation = (body: Parameters<typeof reconcileDaily>[0]) =>
+  http.post<ArchivedRun>("/reconciliation/runs", body).then(r => r.data);
+export const getReconciliationRun = (id: string) => http.get<ArchivedRun>(`/reconciliation/runs/${id}`).then(r => r.data);
+export const verifyReconciliationRun = (id: string) => http.get<{ matches: boolean }>(`/reconciliation/runs/${id}/verify`).then(r => r.data);
+export const recalculateReconciliationRun = (id: string) => http.post<ArchivedRun>(`/reconciliation/runs/${id}/recalculate`, {}).then(r => r.data);
+
 // ------------------------------ 大屏 ------------------------------
 export interface Overview {
   active_sources: number;

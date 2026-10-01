@@ -1,8 +1,10 @@
 """对账 API：质量检查先于容差判定，返回可复核的计量依据。"""
 from typing import Annotated
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from ..auth import CurrentUser, DbSession, Role, require_roles, get_current_user
 from ..models.gas_sources import GasSource
@@ -14,9 +16,72 @@ from ..schemas.reconciliation import (
 from ..services.metering_quality import DataQualityError, day_window, dual_loop_volume, source_daily_volume
 from ..services.business_day import current_policy
 from ..utils.reconciliation import reconcile_daily, reconcile_dual_loop
+from ..models import ReconciliationRun
+from ..services import reconciliation_archive as archives
 
 router = APIRouter(prefix='/api/reconciliation', tags=['reconciliation'])
 require_reconciler = require_roles(Role.ADMIN, Role.METER_ENG, Role.ACCOUNTANT)
+
+
+class RecalculateRequest(BaseModel):
+    upstream_volume_nm3: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+
+
+def _run(db, run_id):
+    run = db.get(ReconciliationRun, run_id)
+    if not run:
+        raise HTTPException(404, 'reconciliation run not found')
+    return run
+
+
+def _archive(db, source_id, business_date, upstream, username, parent=None):
+    try:
+        return archives.archive(db, source_id, business_date, upstream, username, parent)
+    except DataQualityError as exc:
+        raise HTTPException(409, exc.detail()) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.post('/runs', status_code=201)
+def create_run(payload: DailyReconciliationRequest, db: DbSession,
+               user: Annotated[CurrentUser, Depends(require_reconciler)]):
+    return _archive(db, payload.source_id, payload.business_date, payload.upstream_volume_nm3, user.username)
+
+
+@router.get('/runs')
+def list_runs(db: DbSession, _: Annotated[CurrentUser, Depends(get_current_user)],
+              source_id: int | None = None, business_date: date | None = None,
+              limit: int = Query(default=50, ge=1, le=200), offset: int = Query(default=0, ge=0)):
+    query = select(ReconciliationRun)
+    if source_id is not None:
+        query = query.where(ReconciliationRun.source_id == source_id)
+    if business_date is not None:
+        query = query.where(ReconciliationRun.business_date == business_date)
+    runs = db.scalars(query.order_by(ReconciliationRun.created_at.desc(), ReconciliationRun.id).offset(offset).limit(limit))
+    return [archives.public(run, full=False) for run in runs]
+
+
+@router.get('/runs/{run_id}')
+def get_run(run_id: str, db: DbSession, _: Annotated[CurrentUser, Depends(get_current_user)]):
+    return archives.public(_run(db, run_id))
+
+
+@router.get('/runs/{run_id}/verify')
+def verify_run(run_id: str, db: DbSession, _: Annotated[CurrentUser, Depends(get_current_user)]):
+    try:
+        archives.verify(_run(db, run_id))
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {'matches': True}
+
+
+@router.post('/runs/{run_id}/recalculate', status_code=201)
+def recalculate_run(run_id: str, payload: RecalculateRequest, db: DbSession,
+                    user: Annotated[CurrentUser, Depends(require_reconciler)]):
+    parent = _run(db, run_id)
+    upstream = payload.upstream_volume_nm3 if payload.upstream_volume_nm3 is not None else parent.snapshot_json['upstream_volume_nm3']
+    return _archive(db, parent.source_id, parent.business_date, upstream, user.username, parent)
 
 
 @router.post('/daily', response_model=DailyReconciliationResponse)

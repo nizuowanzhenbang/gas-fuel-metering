@@ -48,6 +48,11 @@ def station_evidence(db, station_id, source, start, end, *, full_day=False) -> M
         .where(MeteringReading.station_id == station_id, MeteringReading.source == source,
                MeteringReading.ts >= start, MeteringReading.ts <= end)
         .order_by(MeteringReading.ts, MeteringReading.id)).all()
+    return reading_evidence(rows, station_id, source, start, end, full_day=full_day)
+
+
+def reading_evidence(rows, station_id, source, start, end, *, full_day=False):
+    """Evaluate a captured ordered input without querying mutable source tables."""
     valid = [r for r in rows if r.validity == Validity.VALID]
     evidence = MeteringEvidence(station_id=station_id, source=source,
                                sample_count=len(valid), excluded_count=len(rows) - len(valid))
