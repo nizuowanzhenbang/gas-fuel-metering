@@ -395,3 +395,6 @@ docker compose up -d --build
 ## 业务日配置更新
 
 支持UTC或固定UTC+08:00及分钟级日切；API、Excel、每日扫描共用口径。详见[业务日说明](docs/BUSINESS-DAY.md)。
+# 对账留档升级（2026-10-01）
+
+支持显式输入快照、规则版本、历史 JSON 导出、留档重放与关联重算。新结果追加保存，原结果保留；详见 [对账留档与重算](docs/RECONCILIATION-ARCHIVE.md)。当前为可复现原型，不代表财务认证或生产验收。

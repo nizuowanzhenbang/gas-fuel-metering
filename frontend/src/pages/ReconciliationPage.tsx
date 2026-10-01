@@ -3,6 +3,7 @@ import { Alert, Button, Card, DatePicker, Form, InputNumber, Select, Space, Stat
 import { InboxOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { isAxiosError } from "axios";
+import { useAuth } from "../store/auth";
 import {
   DailyReconResult,
   BusinessPolicy, getBusinessPolicy,
@@ -12,6 +13,8 @@ import {
   listGasSources,
   reconcileDaily,
   uploadUpstreamDaily,
+  RunSummary, listReconciliationRuns, archiveReconciliation, getReconciliationRun,
+  verifyReconciliationRun, recalculateReconciliationRun,
 } from "../api/resources";
 
 const VERDICT_COLOR: Record<string, string> = { PASS: "green", WARN: "orange", FAIL: "red" };
@@ -22,6 +25,11 @@ const ISSUE_LABEL: Record<string, string> = {
 };
 
 export default function ReconciliationPage() {
+  const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [archiving, setArchiving] = useState(false);
+  const role = useAuth(s => s.role);
+  const canArchive = ["ADMIN", "METER_ENG", "ACCOUNTANT"].includes(role ?? "");
+  const refreshRuns = () => listReconciliationRuns().then(setRuns);
   const [policy, setPolicy] = useState<BusinessPolicy | null>(null);
   const [sources, setSources] = useState<GasSource[]>([]);
   const [result, setResult] = useState<DailyReconResult | null>(null);
@@ -32,9 +40,41 @@ export default function ReconciliationPage() {
   const [qualityError, setQualityError] = useState<{ message: string; stations: MeteringEvidence[] } | null>(null);
 
   useEffect(() => {
+    refreshRuns().catch(() => {});
     listGasSources({ size: 200 }).then((r) => setSources(r.items));
     getBusinessPolicy().then(p => { setPolicy(p); form.setFieldsValue({ business_date: dayjs(p.latest_completed_date) }); });
   }, []);
+
+  const onArchive = async () => {
+    const v = await form.validateFields();
+    setArchiving(true);
+    try {
+      await archiveReconciliation({ source_id: v.source_id, business_date: v.business_date.format("YYYY-MM-DD"),
+        upstream_volume_nm3: v.upstream_volume_nm3 });
+      message.success("已按当前读数计算并留档");
+      await refreshRuns();
+    } catch { /* API interceptor displays errors. */ }
+    finally { setArchiving(false); }
+  };
+
+  const onRecalculate = async (id: string) => {
+    setArchiving(true);
+    try {
+      const child = await recalculateReconciliationRun(id);
+      message.success(`已追加新记录，厂内计量变化 ${child.snapshot.delta_plant_nm3} Nm³`);
+      await refreshRuns();
+    } catch { /* API interceptor displays errors. */ }
+    finally { setArchiving(false); }
+  };
+
+  const onExport = async (id: string) => {
+    try {
+      const data = await getReconciliationRun(id);
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+      const a = document.createElement("a"); a.href = url; a.download = `reconciliation-${id}.json`; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch { /* API interceptor displays errors. */ }
+  };
 
   const onRun = async () => {
     const v = await form.validateFields();
@@ -85,6 +125,7 @@ export default function ReconciliationPage() {
             <InputNumber min={0} style={{ width: 180 }} />
           </Form.Item>
           <Button type="primary" htmlType="submit" loading={running} disabled={!policy}>执行对账</Button>
+          {canArchive && <Button onClick={onArchive} loading={archiving} disabled={!policy}>按当前输入计算并留档</Button>}
         </Form>
 
         {result && (
@@ -129,6 +170,22 @@ export default function ReconciliationPage() {
               : <Tag color="green">通过</Tag> },
           ]}
         />}
+      </Card>
+
+      <Card title="对账留档（最近 50 条）" extra={<Button onClick={() => refreshRuns().catch(() => {})}>刷新</Button>}>
+        <p>重算沿用原记录的业务日、规则和上游量，读取当前计量数据并追加新记录。导出包含原始读数；复核仅使用留档内容。</p>
+        <Table<RunSummary> rowKey="id" dataSource={runs} size="small" scroll={{ x: 1000 }} columns={[
+          { title: "记录 / 父记录", render: (_, r) => <span title={`${r.id} / ${r.parent_run_id ?? "无"}`}>{r.id.slice(0,8)} / {r.parent_run_id?.slice(0,8) ?? "初次"}</span> },
+          { title: "气源 ID", dataIndex: "source_id" }, { title: "业务日", dataIndex: "business_date" },
+          { title: "留档 UTC", dataIndex: "created_at" }, { title: "操作人", dataIndex: "created_by" },
+          { title: "厂内 Nm³", render: (_, r) => r.result.plant_volume_nm3 },
+          { title: "判定", render: (_, r) => <Tag color={VERDICT_COLOR[r.result.verdict]}>{r.result.verdict}</Tag> },
+          { title: "操作", render: (_, r) => <Space>
+            <Button size="small" onClick={() => onExport(r.id)}>导出</Button>
+            <Button size="small" onClick={() => verifyReconciliationRun(r.id).then(() => message.success("哈希与留档重放一致")).catch(() => {})}>复核</Button>
+            {canArchive && <Button size="small" disabled={archiving} onClick={() => onRecalculate(r.id)}>重算</Button>}
+          </Space> },
+        ]} />
       </Card>
 
       <Card title="上游日报批量导入（Excel）">

@@ -57,19 +57,19 @@ class DualLoopResult:
     reason: str
 
 
-def _judge(abs_relative_pct: float, tolerance_pct: float) -> tuple[Verdict, str]:
+def _judge(abs_relative_pct: float, tolerance_pct: float, fail_multiplier: float = FAIL_MULTIPLIER) -> tuple[Verdict, str]:
     if abs_relative_pct <= tolerance_pct:
         return Verdict.PASS, f"偏差 {abs_relative_pct:.3f}% 在容差 {tolerance_pct}% 内"
-    if abs_relative_pct <= tolerance_pct * FAIL_MULTIPLIER:
+    if abs_relative_pct <= tolerance_pct * fail_multiplier:
         return (
             Verdict.WARN,
             f"偏差 {abs_relative_pct:.3f}% 超容差 {tolerance_pct}% 但未超 "
-            f"{FAIL_MULTIPLIER}×，需人工复核",
+            f"{fail_multiplier}×，需人工复核",
         )
     return (
         Verdict.FAIL,
-        f"偏差 {abs_relative_pct:.3f}% 超容差 {FAIL_MULTIPLIER}× "
-        f"({tolerance_pct * FAIL_MULTIPLIER}%)，锁单待处置",
+        f"偏差 {abs_relative_pct:.3f}% 超容差 {fail_multiplier}× "
+        f"({tolerance_pct * fail_multiplier}%)，锁单待处置",
     )
 
 
@@ -77,6 +77,7 @@ def _reconcile(
     plant_nm3: float,
     upstream_nm3: float,
     tolerance_pct: float,
+    fail_multiplier: float = FAIL_MULTIPLIER,
 ) -> ReconciliationResult:
     if not all(isfinite(v) for v in (plant_nm3, upstream_nm3)):
         raise ValueError('volumes must be finite')
@@ -87,7 +88,7 @@ def _reconcile(
 
     diff = plant_nm3 - upstream_nm3
     relative_pct = diff / upstream_nm3 * 100.0
-    verdict, reason = _judge(abs(relative_pct), tolerance_pct)
+    verdict, reason = _judge(abs(relative_pct), tolerance_pct, fail_multiplier)
 
     return ReconciliationResult(
         plant_volume_nm3=plant_nm3,
