@@ -30,6 +30,8 @@ services:
       DEFAULT_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
       DEFAULT_ADMIN_FULL_NAME: 默认管理员
       ENABLE_SCHEDULER: "true"
+      BUSINESS_TIMEZONE: ${BUSINESS_TIMEZONE:-UTC}
+      BUSINESS_DAY_START_MINUTE: ${BUSINESS_DAY_START_MINUTE:-0}
     ports:
       - "8010:8010"
     restart: unless-stopped

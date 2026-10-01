@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
+from pydantic import Field
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -26,6 +28,8 @@ class Settings(BaseSettings):
     default_admin_full_name: str = "默认管理员"
 
     enable_scheduler: bool = True  # 测试环境通过 .env 关闭
+    business_timezone: Literal['UTC', 'UTC+08:00'] = 'UTC'
+    business_day_start_minute: int = Field(default=0, ge=0, le=1439)
 
     gas_turbine_base: str = "http://gas-turbine-performance:8011"
     fuel_procurement_base: str = "http://fuel-procurement:8005"
