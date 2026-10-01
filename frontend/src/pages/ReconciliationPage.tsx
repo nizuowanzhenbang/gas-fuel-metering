@@ -5,6 +5,7 @@ import dayjs from "dayjs";
 import { isAxiosError } from "axios";
 import {
   DailyReconResult,
+  BusinessPolicy, getBusinessPolicy,
   MeteringEvidence,
   GasSource,
   UploadResponse,
@@ -21,6 +22,7 @@ const ISSUE_LABEL: Record<string, string> = {
 };
 
 export default function ReconciliationPage() {
+  const [policy, setPolicy] = useState<BusinessPolicy | null>(null);
   const [sources, setSources] = useState<GasSource[]>([]);
   const [result, setResult] = useState<DailyReconResult | null>(null);
   const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null);
@@ -31,6 +33,7 @@ export default function ReconciliationPage() {
 
   useEffect(() => {
     listGasSources({ size: 200 }).then((r) => setSources(r.items));
+    getBusinessPolicy().then(p => { setPolicy(p); form.setFieldsValue({ business_date: dayjs(p.latest_completed_date) }); });
   }, []);
 
   const onRun = async () => {
@@ -70,8 +73,8 @@ export default function ReconciliationPage() {
     <Space direction="vertical" size="middle" style={{ width: "100%" }}>
       <Card title="手动日对账" extra={<ThunderboltOutlined />}>
         <Alert type="info" showIcon style={{ marginBottom: 16 }}
-          message="按 UTC 自然日对账：每站需具备当日 00:00 和次日 00:00 的有效累计读数。缺数或回退时先核对数据，再生成结论。" />
-        <Form form={form} layout="inline" onFinish={onRun} initialValues={{ business_date: dayjs().subtract(1, "day") }}>
+          message={policy ? `业务口径 ${policy.timezone}，日切 ${String(Math.floor(policy.start_minute / 60)).padStart(2,"0")}:${String(policy.start_minute % 60).padStart(2,"0")}。日期指区间起始日；每站需完整首末累计读数。` : "业务口径加载中"} />
+        <Form form={form} layout="inline" onFinish={onRun} >
           <Form.Item name="source_id" label="气源" rules={[{ required: true }]}>
             <Select style={{ width: 240 }} options={sources.map((s) => ({ value: s.id, label: `${s.code} ${s.name}` }))} />
           </Form.Item>
@@ -81,7 +84,7 @@ export default function ReconciliationPage() {
           <Form.Item name="upstream_volume_nm3" label="上游计量(Nm³)" rules={[{ required: true }]}>
             <InputNumber min={0} style={{ width: 180 }} />
           </Form.Item>
-          <Button type="primary" htmlType="submit" loading={running}>执行对账</Button>
+          <Button type="primary" htmlType="submit" loading={running} disabled={!policy}>执行对账</Button>
         </Form>
 
         {result && (
@@ -91,10 +94,11 @@ export default function ReconciliationPage() {
               showIcon
               message={
                 <span>
-                  {result.source_code} / {result.business_date} UTC 对账判定 <Tag color={VERDICT_COLOR[result.verdict]}>{result.verdict}</Tag> — {result.reason}
+                  {result.source_code} / {result.business_date} ({result.window.policy.timezone}) 对账判定 <Tag color={VERDICT_COLOR[result.verdict]}>{result.verdict}</Tag> — {result.reason}
                 </span>
               }
             />
+            <p>业务区间 UTC：{result.window.start_utc} → {result.window.end_utc}</p>
             <Space size="large" style={{ marginTop: 16 }}>
               <Statistic title="厂内 (Nm³)" value={result.plant_volume_nm3} precision={3} groupSeparator="," />
               <Statistic title="上游 (Nm³)" value={result.upstream_volume_nm3} precision={3} groupSeparator="," />
@@ -166,6 +170,7 @@ export default function ReconciliationPage() {
             columns={[
               { title: "行号", dataIndex: "row_index", width: 70 },
               { title: "业务日期", dataIndex: "business_date", width: 110 },
+              { title: "业务区间 UTC", render: (_, row) => row.window ? `${row.window.start_utc} → ${row.window.end_utc}` : "—" },
               { title: "气源", dataIndex: "source_code", width: 100 },
               { title: "厂内(Nm³)", dataIndex: "plant_volume_nm3", render: (v) => v?.toLocaleString() ?? "-" },
               { title: "上游(Nm³)", dataIndex: "upstream_volume_nm3", render: (v) => v?.toLocaleString() ?? "-" },
