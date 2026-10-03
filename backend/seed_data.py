@@ -386,11 +386,11 @@ def _seed_alerts(db, station_ids: dict[str, int], gc_ids: dict[str, int]) -> Non
 
 
 def run(*, reset: bool = False) -> None:
+    init_db()  # Refuse missing/unknown schemas before seeding or destructive reset.
     if reset:
         logger.warning("--reset: drop_all + create_all")
         Base.metadata.drop_all(engine)
         Base.metadata.create_all(engine)
-    else:
         init_db()
 
     with SessionLocal() as db:

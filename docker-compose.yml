@@ -15,13 +15,24 @@ services:
       timeout: 5s
       retries: 10
 
+  migrate:
+    build:
+      context: ./backend
+    command: ["python", "-m", "backend.migrate", "upgrade"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://gfm:gfm@postgres:5432/gas_fuel
+    restart: "no"
+
   backend:
     build:
       context: ./backend
     container_name: gfm-backend
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql+psycopg2://gfm:gfm@postgres:5432/gas_fuel
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}

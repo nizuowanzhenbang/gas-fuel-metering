@@ -36,7 +36,6 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    """启动时建表。生产应改用 Alembic 迁移。"""
-    from . import models  # noqa: F401  确保模型注册到 Base.metadata
-
-    Base.metadata.create_all(bind=engine)
+    """Read-only startup gate; perform explicit migration before launching."""
+    from .migrate import check_database
+    check_database(engine)

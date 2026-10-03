@@ -316,10 +316,11 @@ Wobbe 指数表征"等压等开度下通过燃料阀的能量流"。**控制系�
 ### 后端单跑（SQLite，开发用）
 
 ```bash
-cd backend
-python -m venv .venv && source .venv/Scripts/activate     # Windows
-pip install -r requirements.txt
-python -m backend.seed_data --reset                        # 种入演示数据
+# 从仓库根目录运行，先激活 Python 3.11 虚拟环境
+pip install -r backend/requirements.txt
+python -m backend.migrate upgrade                         # 空库创建 / 已知旧库升级
+python -m backend.migrate check
+python -m backend.seed_data                               # 种入演示数据，不清空已有记录
 uvicorn backend.main:app --port 8010 --reload
 # Swagger 文档：http://localhost:8010/docs
 ```
@@ -347,6 +348,7 @@ npm run dev   # http://localhost:5180
 ```bash
 cp .env.example .env       # 改 JWT_SECRET / INTEGRATION_SECRET / ADMIN_PASSWORD
 docker compose up -d --build
+# migrate 服务成功后 backend 才启动；已有部署升级需先停止写入并备份，见 docs/DATABASE-MIGRATIONS.md
 # 前端 http://localhost:5180  后端 http://localhost:8010
 ```
 
