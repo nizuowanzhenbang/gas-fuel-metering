@@ -33,6 +33,7 @@ from ..auth import CurrentUser, DbSession, Role, require_roles
 from ..models.gas_sources import GasSource
 from ..models.metering_readings import MeteringReading, MeteringSource, Validity
 from ..models.metering_stations import MeteringStation
+from ..services.business_day import BusinessWindow, current_policy
 from ..utils.reconciliation import reconcile_daily
 from ..services.metering_quality import DataQualityError, MeteringEvidence, source_daily_volume
 
@@ -45,6 +46,7 @@ MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
 class UploadRowResult(BaseModel):
+    window: BusinessWindow | None = None
     row_index: int  # 1-based，便于操作员对应 Excel 行号
     business_date: date | None = None
     source_code: str | None = None
@@ -62,11 +64,6 @@ class UploadResponse(BaseModel):
     success: int
     failed: int
     rows: list[UploadRowResult]
-
-
-def _date_window_utc(business_date: date) -> tuple[datetime, datetime]:
-    start = datetime.combine(business_date, time.min, tzinfo=timezone.utc)
-    return start, start + timedelta(days=1)
 
 
 def _coerce_business_date(value: Any) -> date:
@@ -162,6 +159,7 @@ async def upload_upstream_daily(
             code = str(row[1]).strip().upper()
             upstream = _coerce_float(row[2])
 
+            result.window = current_policy().window(bdate)
             result.business_date = bdate
             result.source_code = code
             result.upstream_volume_nm3 = upstream

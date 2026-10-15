@@ -1,9 +1,10 @@
 """对账 API：质量检查先于容差判定，返回可复核的计量依据。"""
 from typing import Annotated
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..auth import CurrentUser, DbSession, Role, require_roles
+from ..auth import CurrentUser, DbSession, Role, require_roles, get_current_user
 from ..models.gas_sources import GasSource
 from ..models.metering_stations import MeteringStation
 from ..schemas.reconciliation import (
@@ -11,6 +12,7 @@ from ..schemas.reconciliation import (
     DualLoopReconciliationRequest, DualLoopReconciliationResponse,
 )
 from ..services.metering_quality import DataQualityError, day_window, dual_loop_volume, source_daily_volume
+from ..services.business_day import current_policy
 from ..utils.reconciliation import reconcile_daily, reconcile_dual_loop
 
 router = APIRouter(prefix='/api/reconciliation', tags=['reconciliation'])
@@ -31,7 +33,7 @@ def reconcile_daily_endpoint(payload: DailyReconciliationRequest, db: DbSession,
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     return DailyReconciliationResponse(source_id=source.id, source_code=source.code,
-        business_date=payload.business_date, **vars(result), sample_count=count, stations=evidence)
+        business_date=payload.business_date, **vars(result), sample_count=count, stations=evidence, window=current_policy().window(payload.business_date))
 
 
 @router.post('/dual-loop', response_model=DualLoopReconciliationResponse)
@@ -50,4 +52,10 @@ def reconcile_dual_loop_endpoint(payload: DualLoopReconciliationRequest, db: DbS
         raise HTTPException(400, str(exc)) from exc
     return DualLoopReconciliationResponse(station_id=station.id, station_code=station.code,
         business_date=payload.business_date, **vars(result), primary_sample_count=primary.sample_count,
-        backup_sample_count=backup.sample_count, stations=[primary, backup])
+        backup_sample_count=backup.sample_count, stations=[primary, backup], window=current_policy().window(payload.business_date))
+
+
+@router.get('/policy')
+def reconciliation_policy(_: Annotated[CurrentUser, Depends(get_current_user)]):
+    policy = current_policy()
+    return {**policy.model_dump(), "latest_completed_date": policy.latest_completed_date(datetime.now(timezone.utc))}

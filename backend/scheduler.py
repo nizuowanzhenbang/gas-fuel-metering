@@ -4,7 +4,7 @@
 1. 每分钟扫描主备计量偏差 → 超 0.3% 写 PRIMARY_BACKUP_DEVIATION 告警
 2. 每 5 分钟扫描 GC 状态 → CALIBRATING/FAULT 持续超阈值写 GC_FAULT/GC_CALIBRATION_DUE
 3. 每天 08:00 扫描计量器具检定到期（30 天预警）→ METER_VERIFICATION_DUE
-4. 每天 06:00 触发 **昨日** 主备回路自查（实际三方对账依赖上游日报，由 upload router 触发）
+4. 每个业务日结束5分钟后 触发 **最近完整业务日** 主备回路自查（实际三方对账依赖上游日报，由 upload router 触发）
 
 启动方式：main.py lifespan 内 start()，停机 shutdown()。
 单元测试不启动调度，但 job 函数本身可直接被测试调用。
@@ -18,6 +18,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import select
 
 from .database import SessionLocal
+from .services.business_day import current_policy
 from .models.alerts import AlertCategory, AlertLevel
 from .models.gc_analyzers import GCAnalyzer, GCStatus
 from .models.metering_readings import MeteringReading, MeteringSource, Validity
@@ -40,11 +41,6 @@ def _now() -> datetime:
 def _as_utc(dt: datetime) -> datetime:
     """SQLite 取出来的 datetime 可能丢 tzinfo，统一按 UTC 补齐。"""
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
-
-
-def _day_window(d: date) -> tuple[datetime, datetime]:
-    start = datetime.combine(d, time.min, tzinfo=timezone.utc)
-    return start, start + timedelta(days=1)
 
 
 def scan_primary_backup_deviation() -> int:
@@ -151,9 +147,11 @@ def scan_meter_verification_due() -> int:
 
 
 def scan_yesterday_dual_loop() -> int:
-    """每天 06:00：对昨日每个有主备读数的站做回路对账。"""
-    yesterday = (_now() - timedelta(days=1)).date()
-    start, end = _day_window(yesterday)
+    """每个业务日结束5分钟后：对最近完整业务日每个有主备读数的站做回路对账。"""
+    policy = current_policy()
+    yesterday = policy.latest_completed_date(_now())
+    window = policy.window(yesterday)
+    start, end = window.start_utc, window.end_utc
     fired = 0
     with SessionLocal() as db:
         stations = db.scalars(
@@ -179,6 +177,7 @@ def scan_yesterday_dual_loop() -> int:
                     station_id=st.id,
                     payload_json={
                         "business_date": yesterday.isoformat(),
+                        "window": window.model_dump(mode="json"),
                         "primary_nm3": primary_vol,
                         "backup_nm3": backup_vol,
                         "diff_pct": verdict.relative_diff_pct,
@@ -200,7 +199,9 @@ def start_scheduler() -> BackgroundScheduler:
     sched.add_job(scan_primary_backup_deviation, "interval", minutes=1, id="primary-backup", max_instances=1)
     sched.add_job(scan_gc_status, "interval", minutes=5, id="gc-status", max_instances=1)
     sched.add_job(scan_meter_verification_due, "cron", hour=8, minute=0, id="verification-due")
-    sched.add_job(scan_yesterday_dual_loop, "cron", hour=6, minute=0, id="yesterday-dual-loop")
+    cutoff = (current_policy().start_minute + 5) % 1440
+    sched.add_job(scan_yesterday_dual_loop, "cron", hour=cutoff // 60, minute=cutoff % 60,
+                  timezone=current_policy().tz, id="yesterday-dual-loop")
     sched.start()
     logger.info("scheduler started with 4 jobs")
     _scheduler = sched

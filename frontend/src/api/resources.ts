@@ -102,7 +102,12 @@ export interface MeteringEvidence {
   issues: string[];
 }
 
+export interface BusinessPolicy { timezone: string; start_minute: number; version: string; latest_completed_date: string }
+export interface BusinessWindow { policy: Omit<BusinessPolicy, "latest_completed_date">; start_utc: string; end_utc: string }
+export const getBusinessPolicy = () => http.get<BusinessPolicy>("/reconciliation/policy").then(r => r.data);
+
 export interface DailyReconResult {
+  window: BusinessWindow;
   source_id: number;
   source_code: string;
   business_date: string;
@@ -207,6 +212,7 @@ export interface UploadResponse {
     verdict: string | null;
     error: string | null;
     error_code: string | null;
+    window: BusinessWindow | null;
     stations: MeteringEvidence[];
   }[];
 }

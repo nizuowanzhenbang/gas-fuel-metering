@@ -5,6 +5,7 @@ from decimal import Decimal
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from .business_day import current_policy
 from ..models.metering_readings import MeteringReading, MeteringSource, Validity
 from ..models.metering_stations import MeteringStation
 
@@ -38,8 +39,8 @@ def as_utc(ts: datetime) -> datetime:
 
 
 def day_window(day: date) -> tuple[datetime, datetime]:
-    start = datetime.combine(day, time.min, tzinfo=timezone.utc)
-    return start, start + timedelta(days=1)
+    window = current_policy().window(day)
+    return window.start_utc, window.end_utc
 
 
 def station_evidence(db, station_id, source, start, end, *, full_day=False) -> MeteringEvidence:

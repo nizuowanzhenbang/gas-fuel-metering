@@ -1,0 +1,5 @@
+# Business day then immutable reconciliation runs
+
+Round 6: fixed UTC or UTC+08:00 timezone, configurable minute-of-day cutoff; default UTC midnight unchanged. Shared policy owns API/Excel/daily scanner boundaries and response metadata. Daily scan uses most recent completed business day; interval scans retain rolling semantics. Raw timestamp storage remains UTC, never shifts existing rows. Fixed-offset policy explicitly excludes DST regions. Existing partial dual-loop observation semantics stay documented. Validate adjacent days, nonzero minute cutoff, API/Excel/scanner consistency and rejection of invalid settings.
+
+Round 7 after round6 CI: explicit archive endpoint saves complete input reading snapshot, station membership, upstream input, policy/algorithm versions and output; fetch/list/export immutable runs; explicit child recalculation under parent policy, preserve all earlier results, missing data refuses new run. New table only, no modifications to settlement records, no payment/approval claims. Each round independent branch/PR/rollback and tests.

@@ -207,12 +207,13 @@ def _seed_gcs(db, station_ids: dict[str, int]) -> dict[str, int]:
 
 
 def _seed_readings(db, station_ids: dict[str, int]) -> None:
-    """从昨日 UTC 零点到当前的 5min 主备读数，覆盖完整昨日对账边界。"""
+    """从最近完整业务日起点到当前的5min主备读数。"""
     now = _now()
-    # 截到分钟，避免边界尾数
-    end = now.replace(minute=(now.minute // 5) * 5, second=0, microsecond=0)
+    end = now
     step = timedelta(minutes=5)
-    start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    from .services.business_day import current_policy
+    policy = current_policy()
+    start = policy.window(policy.latest_completed_date(now)).start_utc
     samples = int((end - start) / step) + 1
 
     for code, sid in station_ids.items():
@@ -226,7 +227,7 @@ def _seed_readings(db, station_ids: dict[str, int]) -> None:
         accum_primary = base
         accum_backup = base * 1.0001  # 留 0.01% 起始偏置
         for i in range(samples):
-            ts = end - step * (samples - 1 - i)
+            ts = start + step * i
 
             # 中间 1h（10 步）模拟 FAULT 段
             primary_validity = Validity.VALID
