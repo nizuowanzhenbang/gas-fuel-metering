@@ -1,4 +1,4 @@
-# Codex 电厂项目接续规则
+# 电厂数智化项目接续规则
 
 本仓库属于用户的电厂项目。统一进度仓库：
 https://github.com/nizuowanzhenbang/smart-power-plant/tree/main/progress （公开，默认分支 main，进度文件位于 progress/）。
